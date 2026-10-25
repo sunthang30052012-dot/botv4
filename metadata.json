@@ -1,0 +1,6 @@
+{
+  "name": "Minecraft Bot Control Panel",
+  "description": "Full-stack Minecraft bot control console with 3D ASCII voxel view, radar, macros, inventory, and chat.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
