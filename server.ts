@@ -1,6 +1,8 @@
 import express from 'express';
 import http from 'http';
 import path from 'path';
+import fs from 'fs';
+import { execSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import { Server as SocketIOServer } from 'socket.io';
 import {
@@ -535,20 +537,49 @@ startSimulator();
 
 // ------------------- DEV MIDDLEWARE OR STATIC SERVING -------------------
 async function startServer() {
-  const PORT = 3000;
+  // Support both AI Studio dev environment (port 3000) and external production platforms like Render
+  const isRender = !!process.env.RENDER || !!process.env.RENDER_SERVICE_ID;
+  const isProd = process.env.NODE_ENV === 'production';
+  const customPort = process.env.PORT && process.env.PORT !== '8080' ? Number(process.env.PORT) : null;
+  const PORT = (isRender || isProd) && customPort ? customPort : 3000;
 
-  if (process.env.NODE_ENV !== 'production') {
+  const distPath = path.resolve(process.cwd(), 'dist');
+  const distIndex = path.join(distPath, 'index.html');
+
+  if (isProd) {
+    // If dist/index.html is missing (e.g. build step was omitted in Render build command), build it automatically!
+    if (!fs.existsSync(distIndex)) {
+      console.log('[AUTO-BUILD] dist/index.html not found in production. Automatically running Vite build...');
+      try {
+        execSync('npx vite build', { stdio: 'inherit' });
+        console.log('[AUTO-BUILD] Vite build completed successfully.');
+      } catch (buildErr: any) {
+        console.error('[AUTO-BUILD FAILED]', buildErr?.message);
+      }
+    }
+
+    if (fs.existsSync(distIndex)) {
+      app.use(express.static(distPath));
+      app.get('*', (req, res) => {
+        res.sendFile(distIndex);
+      });
+    } else {
+      // Graceful fallback to on-the-fly Vite middleware so server never crashes with ENOENT
+      console.log('[FALLBACK] dist/index.html missing; falling back to dynamic Vite middleware');
+      const { createServer: createViteServer } = await import('vite');
+      const vite = await createViteServer({
+        server: { middlewareMode: true },
+        appType: 'spa',
+      });
+      app.use(vite.middlewares);
+    }
+  } else {
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
     });
     app.use(vite.middlewares);
-  } else {
-    app.use(express.static(path.resolve(__dirname, 'dist')));
-    app.get('*', (req, res) => {
-      res.sendFile(path.resolve(__dirname, 'dist', 'index.html'));
-    });
   }
 
   server.listen(PORT, '0.0.0.0', () => {
