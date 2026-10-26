@@ -21,7 +21,7 @@ export const ConnectionPanel: React.FC<ConnectionPanelProps> = ({
   const [version, setVersion] = useState(config.version || '');
   const [auth, setAuth] = useState<'offline' | 'microsoft'>(config.auth);
   const [loginPass, setLoginPass] = useState('');
-  const [mode, setMode] = useState<'live' | 'simulator'>(config.mode || 'simulator');
+  const [mode, setMode] = useState<'live' | 'simulator'>(config.mode || 'live');
 
   const handleStart = (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,21 +50,9 @@ export const ConnectionPanel: React.FC<ConnectionPanelProps> = ({
       <div className="flex items-center justify-between border-b border-slate-800/60 pb-3">
         <div className="flex items-center gap-2">
           <Globe className="w-4 h-4 text-emerald-400" />
-          <h2 className="font-semibold text-slate-200 text-xs">Cấu Hình Server & Tài Khoản</h2>
+          <h2 className="font-semibold text-slate-200 text-xs">Kết Nối Minecraft Thật (Mineflayer)</h2>
         </div>
         <div className="flex items-center gap-1.5 text-xs">
-          <button
-            type="button"
-            onClick={() => setMode('simulator')}
-            className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors ${
-              mode === 'simulator'
-                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            Sandbox Giả Lập
-          </button>
-          <span className="text-slate-600">|</span>
           <button
             type="button"
             onClick={() => setMode('live')}
@@ -74,7 +62,19 @@ export const ConnectionPanel: React.FC<ConnectionPanelProps> = ({
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
-            Mineflayer Thật
+            Server Thật
+          </button>
+          <span className="text-slate-600">|</span>
+          <button
+            type="button"
+            onClick={() => setMode('simulator')}
+            className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors ${
+              mode === 'simulator'
+                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            Sandbox Thử Nghiệm
           </button>
         </div>
       </div>

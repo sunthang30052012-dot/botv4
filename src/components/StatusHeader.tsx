@@ -56,7 +56,7 @@ export const StatusHeader: React.FC<StatusHeaderProps> = ({ state, fps }) => {
         <div className="flex items-center gap-1">
           <Cpu className="w-3.5 h-3.5 text-slate-500" />
           <span className="text-emerald-500 font-medium uppercase">
-            {state.mode === 'simulator' ? 'Sandbox Giả Lập' : 'Live Server'}
+            {state.mode === 'simulator' ? 'Sandbox Giả Lập' : 'Minecraft Thật (Mineflayer)'}
           </span>
         </div>
       </div>

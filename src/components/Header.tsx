@@ -54,14 +54,14 @@ export const Header: React.FC<HeaderProps> = ({
           Góc Nhìn 3D & Radar
         </button>
         <button
-          onClick={() => onNavigate('macros')}
+          onClick={() => onNavigate('blocks')}
           className={`hover:text-emerald-400 transition-colors whitespace-nowrap shrink-0 pb-1 ${
-            activeSection === 'macros'
+            activeSection === 'blocks'
               ? 'text-emerald-400 border-b-2 border-emerald-500'
               : ''
           }`}
         >
-          Vượt Ải & Macros
+          Đào & Đặt Block
         </button>
         <button
           onClick={() => onNavigate('inventory')}
@@ -71,7 +71,7 @@ export const Header: React.FC<HeaderProps> = ({
               : ''
           }`}
         >
-          Kho Đồ Bot
+          Kho Đồ & Vật Phẩm
         </button>
         <button
           onClick={() => onNavigate('chat')}

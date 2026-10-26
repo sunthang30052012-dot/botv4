@@ -5,6 +5,7 @@ import fs from 'fs';
 import { execSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import { Server as SocketIOServer } from 'socket.io';
+import { Vec3 } from 'vec3';
 import {
   takeSnapshot,
   getPose,
@@ -35,15 +36,15 @@ const config: BotConfig = {
   username: 'ipttdup',
   version: '1.20.1',
   auth: 'offline',
-  mode: 'simulator', // default to simulator so it works out of the box in web preview
+  mode: 'live', // Default to REAL Minecraft server with Mineflayer
 };
 
 let loginPass = '';
 let bot: any = null;
-let currentMode: 'live' | 'simulator' = 'simulator';
+let currentMode: 'live' | 'simulator' = 'live';
 let isConnected = false;
-let botStatus = 'Đang chạy giả lập thế giới Minecraft (Sandbox)';
-let currentXYZ = 'X: 128 | Y: 65 | Z: 256';
+let botStatus = 'Đang kết nối tới máy chủ Minecraft thật...';
+let currentXYZ = 'X: 0 | Y: 0 | Z: 0';
 let isRandomMoving = false;
 let lastSnap: any = null;
 
@@ -169,6 +170,12 @@ async function startRealBot() {
 
   bot = b;
 
+  b.on('connect', () => {
+    if (bot !== b) return;
+    botStatus = `Đã thông kết nối tới ${config.host}:${config.port}. Đang thực hiện Handshake...`;
+    io.emit('minecraftChat', `§a[KẾT NỐI] Đã kết nối TCP tới ${config.host}:${config.port}`);
+  });
+
   b.on('login', () => {
     if (bot !== b) return;
     isConnected = true;
@@ -180,8 +187,30 @@ async function startRealBot() {
     if (bot !== b) return;
     clearAllIntervals();
     isConnected = true;
-    botStatus = 'Đã xuất hiện trong game!';
-    io.emit('minecraftChat', '§a[BOT] Nhân vật đã spawn trong thế giới game!');
+    botStatus = 'Đã xuất hiện trong game Minecraft thật!';
+    io.emit('minecraftChat', '§a[BOT] Nhân vật đã spawn trong thế giới game thật!');
+
+    const sendRealInventory = () => {
+      if (!b || !b.inventory) return;
+      try {
+        const items: any[] = [];
+        for (const it of b.inventory.items()) {
+          items.push({
+            slot: it.slot,
+            name: it.name,
+            count: it.count,
+            displayName: it.displayName || it.name,
+          });
+        }
+        io.emit('inventoryUpdate', items);
+      } catch (e) {}
+    };
+
+    sendRealInventory();
+    try {
+      b.inventory?.on?.('windowUpdate', sendRealInventory);
+      b.on('playerCollect', sendRealInventory);
+    } catch (e) {}
 
     // Auto /login if password provided
     if (loginPass && !b._autoLoginDone) {
@@ -532,8 +561,295 @@ app.post('/api/inventory/select', (req, res) => {
   res.json({ success: true, slot });
 });
 
-// Start simulator immediately on boot
-startSimulator();
+// Use / eat currently held item (food)
+app.post('/api/inventory/consume', async (req, res) => {
+  if (currentMode === 'live' && bot) {
+    if (!bot.entity) {
+      return res.status(400).json({ success: false, message: 'Bot chưa vào game hoặc chưa xuất hiện.' });
+    }
+    try {
+      io.emit('minecraftChat', '§6[HÀNH ĐỘNG] Đang ăn/sử dụng vật phẩm trên tay...');
+      await bot.consume();
+      io.emit('minecraftChat', '§a[HÀNH ĐỘNG] Đã ăn xong vật phẩm!');
+      res.json({ success: true });
+    } catch (e: any) {
+      io.emit('minecraftChat', `§c[LỖI ĂN] ${e.message}`);
+      res.status(400).json({ success: false, message: e.message });
+    }
+  } else {
+    io.emit('minecraftChat', '§a[SANDBOX] Đã ăn 1 món thức ăn (Hồi phục độ no)!');
+    res.json({ success: true });
+  }
+});
+
+// Activate / right-click item (e.g. clock for KingSMP menu, ender pearl, shield)
+app.post('/api/inventory/activate', (req, res) => {
+  if (currentMode === 'live' && bot) {
+    if (!bot.entity) {
+      return res.status(400).json({ success: false, message: 'Bot chưa vào game hoặc chưa xuất hiện.' });
+    }
+    try {
+      bot.activateItem();
+      io.emit('minecraftChat', '§b[HÀNH ĐỘNG] Đã kích hoạt chuột phải vật phẩm đang cầm!');
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(400).json({ success: false, message: e.message });
+    }
+  } else {
+    io.emit('minecraftChat', '§b[SANDBOX] Đã kích hoạt vật phẩm đang cầm!');
+    res.json({ success: true });
+  }
+});
+
+// Drop / Toss item from slot
+app.post('/api/inventory/toss', async (req, res) => {
+  const slot = Number(req.body?.slot);
+  const count = Number(req.body?.count) || null;
+
+  if (currentMode === 'live' && bot && bot.inventory) {
+    try {
+      const item = bot.inventory.slots[slot];
+      if (!item) {
+        return res.status(400).json({ success: false, message: 'Ô này không có vật phẩm.' });
+      }
+      if (count && count < item.count) {
+        await bot.toss(item.type, null, count);
+      } else {
+        await bot.tossStack(item);
+      }
+      io.emit('minecraftChat', `§7[KHO ĐỒ] Đã vứt bỏ ${item.displayName || item.name} ra ngoài.`);
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ success: false, message: e.message });
+    }
+  } else {
+    io.emit('minecraftChat', `§7[SANDBOX] Đã vứt vật phẩm tại ô ${slot}`);
+    res.json({ success: true });
+  }
+});
+
+// Equip item (hand, head, torso, legs, feet, off-hand)
+app.post('/api/inventory/equip', async (req, res) => {
+  const slot = Number(req.body?.slot);
+  const destination = String(req.body?.destination || 'hand');
+
+  if (currentMode === 'live' && bot && bot.inventory) {
+    try {
+      const item = bot.inventory.slots[slot];
+      if (!item) {
+        return res.status(400).json({ success: false, message: 'Ô này không có vật phẩm.' });
+      }
+      await bot.equip(item, destination as any);
+      io.emit('minecraftChat', `§a[TRANG BỊ] Đã trang bị ${item.displayName || item.name} vào ${destination}!`);
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ success: false, message: e.message });
+    }
+  } else {
+    io.emit('minecraftChat', `§a[SANDBOX] Đã trang bị vật phẩm vào ${destination}`);
+    res.json({ success: true });
+  }
+});
+
+// Move / swap item between two slots
+app.post('/api/inventory/move', async (req, res) => {
+  const sourceSlot = Number(req.body?.sourceSlot);
+  const destSlot = Number(req.body?.destSlot);
+
+  if (currentMode === 'live' && bot && bot.moveSlotItem) {
+    try {
+      await bot.moveSlotItem(sourceSlot, destSlot);
+      io.emit('minecraftChat', `§7[KHO ĐỒ] Đã chuyển vật phẩm từ ô ${sourceSlot} sang ô ${destSlot}.`);
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ success: false, message: e.message });
+    }
+  } else {
+    io.emit('minecraftChat', `§7[SANDBOX] Đã đổi chỗ ô ${sourceSlot} và ${destSlot}`);
+    res.json({ success: true });
+  }
+});
+
+// ------------------- BLOCK MINING & PLACING API -------------------
+
+// Dig block in front (at cursor or in raycast view)
+app.post('/api/block/dig', async (req, res) => {
+  if (currentMode === 'live' && bot) {
+    if (!bot.entity) {
+      return res.status(400).json({ success: false, message: 'Bot chưa vào game hoặc chưa xuất hiện.' });
+    }
+    try {
+      let targetBlock = bot.blockAtCursor ? bot.blockAtCursor(4.5) : null;
+
+      if (!targetBlock && bot.entity) {
+        const p = bot.entity.position;
+        const yaw = bot.entity.yaw;
+        const pitch = bot.entity.pitch;
+
+        for (let d = 1.2; d <= 4.5; d += 0.5) {
+          const tx = Math.floor(p.x - Math.sin(yaw) * Math.cos(pitch) * d);
+          const ty = Math.floor(p.y + 1.62 + Math.sin(pitch) * d);
+          const tz = Math.floor(p.z - Math.cos(yaw) * Math.cos(pitch) * d);
+          const b = bot.blockAt(new Vec3(tx, ty, tz));
+          if (b && b.name !== 'air' && b.name !== 'water' && b.name !== 'lava') {
+            targetBlock = b;
+            break;
+          }
+        }
+      }
+
+      if (!targetBlock) {
+        return res.status(400).json({ success: false, message: 'Không tìm thấy block nào trước mặt để đào.' });
+      }
+
+      if (!bot.canDigBlock(targetBlock)) {
+        return res.status(400).json({ success: false, message: `Block ${targetBlock.name} không thể đào được.` });
+      }
+
+      io.emit('minecraftChat', `§e[ĐÀO BLOCK] Đang đào block ${targetBlock.displayName || targetBlock.name} tại (${targetBlock.position.x}, ${targetBlock.position.y}, ${targetBlock.position.z})...`);
+      
+      await bot.dig(targetBlock, true);
+      io.emit('minecraftChat', `§a[ĐÀO BLOCK] Đã phá vỡ block ${targetBlock.displayName || targetBlock.name} thành công!`);
+      res.json({ success: true, block: targetBlock.name });
+    } catch (err: any) {
+      io.emit('minecraftChat', `§c[LỖI ĐÀO] ${err.message}`);
+      res.status(500).json({ success: false, message: err.message });
+    }
+  } else {
+    // Simulator dig
+    const frontX = Math.floor(simPos.x - Math.sin(simYaw) * 2);
+    const frontY = Math.floor(simPos.y);
+    const frontZ = Math.floor(simPos.z - Math.cos(simYaw) * 2);
+    io.emit('minecraftChat', `§a[SANDBOX ĐÀO] Đã đào vỡ block trước mặt tại (${frontX}, ${frontY}, ${frontZ})!`);
+    res.json({ success: true });
+  }
+});
+
+// Dig block directly under feet
+app.post('/api/block/dig-down', async (req, res) => {
+  if (currentMode === 'live' && bot) {
+    if (!bot.entity) {
+      return res.status(400).json({ success: false, message: 'Bot chưa vào game hoặc chưa xuất hiện.' });
+    }
+    try {
+      const p = bot.entity.position;
+      const targetPos = new Vec3(Math.floor(p.x), Math.floor(p.y) - 1, Math.floor(p.z));
+      const targetBlock = bot.blockAt(targetPos);
+      if (!targetBlock || targetBlock.name === 'air') {
+        return res.status(400).json({ success: false, message: 'Dưới chân không có block cứng nào.' });
+      }
+      if (!bot.canDigBlock(targetBlock)) {
+        return res.status(400).json({ success: false, message: `Block ${targetBlock.name} dưới chân không thể đào.` });
+      }
+      io.emit('minecraftChat', `§e[ĐÀO BLOCK] Đang đào block dưới chân (${targetBlock.displayName || targetBlock.name})...`);
+      await bot.dig(targetBlock, true);
+      io.emit('minecraftChat', '§a[ĐÀO BLOCK] Đã đào xong block dưới chân!');
+      res.json({ success: true, block: targetBlock.name });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  } else {
+    io.emit('minecraftChat', '§a[SANDBOX ĐÀO] Đã đào 1 block dưới chân!');
+    res.json({ success: true });
+  }
+});
+
+// Stop digging
+app.post('/api/block/stop-dig', (req, res) => {
+  if (currentMode === 'live' && bot && bot.stopDigging) {
+    bot.stopDigging();
+  }
+  res.json({ success: true });
+});
+
+// Place block in front
+app.post('/api/block/place', async (req, res) => {
+  if (currentMode === 'live' && bot) {
+    if (!bot.entity) {
+      return res.status(400).json({ success: false, message: 'Bot chưa vào game hoặc chưa xuất hiện.' });
+    }
+    try {
+      const p = bot.entity.position;
+      const yaw = bot.entity.yaw;
+
+      const fx = Math.floor(p.x - Math.sin(yaw) * 1.5);
+      const fy = Math.floor(p.y);
+      const fz = Math.floor(p.z - Math.cos(yaw) * 1.5);
+
+      let refBlock = bot.blockAt(new Vec3(fx, fy - 1, fz));
+      let face = new Vec3(0, 1, 0);
+
+      if (!refBlock || refBlock.name === 'air') {
+        refBlock = bot.blockAt(new Vec3(Math.floor(p.x), Math.floor(p.y) - 1, Math.floor(p.z)));
+      }
+
+      if (!refBlock || refBlock.name === 'air') {
+        return res.status(400).json({ success: false, message: 'Không tìm thấy block điểm tựa để đặt.' });
+      }
+
+      // Check if held item is a placeable block
+      let held = bot.heldItem;
+      if (!held || !held.name || held.name.includes('sword') || held.name.includes('pickaxe') || held.name.includes('apple')) {
+        const blockItem = bot.inventory.items().find((it: any) =>
+          it.name.includes('plank') || it.name.includes('dirt') || it.name.includes('stone') ||
+          it.name.includes('cobble') || it.name.includes('wood') || it.name.includes('sand')
+        );
+        if (blockItem) {
+          await bot.equip(blockItem, 'hand');
+          held = bot.heldItem;
+        }
+      }
+
+      await bot.placeBlock(refBlock, face);
+      io.emit('minecraftChat', `§a[ĐẶT BLOCK] Đã đặt block ${held?.displayName || held?.name || 'mới'} trước mặt!`);
+      res.json({ success: true });
+    } catch (err: any) {
+      io.emit('minecraftChat', `§c[LỖI ĐẶT BLOCK] ${err.message}`);
+      res.status(500).json({ success: false, message: err.message });
+    }
+  } else {
+    io.emit('minecraftChat', '§a[SANDBOX ĐẶT] Đã đặt block mới thành công!');
+    res.json({ success: true });
+  }
+});
+
+// Pillar up (jump and place block below feet)
+app.post('/api/block/pillar', async (req, res) => {
+  if (currentMode === 'live' && bot) {
+    if (!bot.entity) {
+      return res.status(400).json({ success: false, message: 'Bot chưa vào game hoặc chưa xuất hiện.' });
+    }
+    try {
+      const p = bot.entity.position;
+      const refBlock = bot.blockAt(new Vec3(Math.floor(p.x), Math.floor(p.y) - 1, Math.floor(p.z)));
+      if (!refBlock || refBlock.name === 'air') {
+        return res.status(400).json({ success: false, message: 'Không có block điểm tựa dưới chân.' });
+      }
+
+      bot.setControlState('jump', true);
+      setTimeout(async () => {
+        try {
+          await bot.placeBlock(refBlock, new Vec3(0, 1, 0));
+          bot.setControlState('jump', false);
+          io.emit('minecraftChat', '§a[XÂY CỘT] Đã nhảy lên và đặt block dưới chân thành công!');
+        } catch (e: any) {
+          bot.setControlState('jump', false);
+        }
+      }, 250);
+
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  } else {
+    simPos.y += 1;
+    io.emit('minecraftChat', '§a[SANDBOX XÂY CỘT] Đã nhảy lên và đặt block dưới chân!');
+    res.json({ success: true });
+  }
+});
+
+// Start real Minecraft bot with Mineflayer immediately on boot
+startRealBot();
 
 // ------------------- DEV MIDDLEWARE OR STATIC SERVING -------------------
 async function startServer() {

@@ -13,6 +13,7 @@ import { ControlPad } from './components/ControlPad';
 import { MacroPanel } from './components/MacroPanel';
 import { VitalsBar } from './components/VitalsBar';
 import { InventoryViewer } from './components/InventoryViewer';
+import { BlockControls } from './components/BlockControls';
 import { ChatConsole } from './components/ChatConsole';
 import type { BotState, BotPose, VoxelSnapshot, InventoryItem, BotConfig } from './types/minecraft';
 
@@ -22,16 +23,16 @@ const DEFAULT_CONFIG: BotConfig = {
   username: 'ipttdup',
   version: '1.20.1',
   auth: 'offline',
-  mode: 'simulator',
+  mode: 'live',
 };
 
 export default function App() {
   const [state, setState] = useState<BotState>({
-    status: 'Đang khởi động hệ thống...',
-    currentXYZ: 'X: 128 | Y: 65 | Z: 256',
+    status: 'Đang kết nối tới máy chủ Minecraft thật...',
+    currentXYZ: 'X: 0 | Y: 0 | Z: 0',
     isRandomMoving: false,
     connected: false,
-    mode: 'simulator',
+    mode: 'live',
     config: DEFAULT_CONFIG,
     pose: {
       x: 128.5,
@@ -264,6 +265,130 @@ export default function App() {
     }
   };
 
+  const handleDigFront = async () => {
+    try {
+      showToast('⛏️ Đang đào block trước mặt...');
+      const res = await fetch('/api/block/dig', { method: 'POST' });
+      const data = await res.json();
+      if (!data.success) {
+        showToast(data.message || 'Không thể đào block');
+      } else {
+        showToast('⛏️ Đã đào xong block!');
+      }
+    } catch (e: any) {
+      showToast('Lỗi đào block: ' + e.message);
+    }
+  };
+
+  const handleDigDown = async () => {
+    try {
+      showToast('⛏️ Đang đào block dưới chân...');
+      const res = await fetch('/api/block/dig-down', { method: 'POST' });
+      const data = await res.json();
+      if (!data.success) {
+        showToast(data.message || 'Không thể đào block');
+      } else {
+        showToast('⛏️ Đã đào xong block dưới chân!');
+      }
+    } catch (e: any) {
+      showToast('Lỗi đào block: ' + e.message);
+    }
+  };
+
+  const handlePlaceFront = async () => {
+    try {
+      showToast('🧱 Đang đặt block phía trước...');
+      const res = await fetch('/api/block/place', { method: 'POST' });
+      const data = await res.json();
+      if (!data.success) {
+        showToast(data.message || 'Không thể đặt block');
+      } else {
+        showToast('🧱 Đã đặt block thành công!');
+      }
+    } catch (e: any) {
+      showToast('Lỗi đặt block: ' + e.message);
+    }
+  };
+
+  const handlePillarUp = async () => {
+    try {
+      showToast('🪜 Đang nhảy lên đặt block dưới chân...');
+      const res = await fetch('/api/block/pillar', { method: 'POST' });
+      const data = await res.json();
+      if (!data.success) {
+        showToast(data.message || 'Không thể đặt block dưới chân');
+      } else {
+        showToast('🪜 Đã xây cột lên 1 block!');
+      }
+    } catch (e: any) {
+      showToast('Lỗi xây cột: ' + e.message);
+    }
+  };
+
+  const handleStopDig = async () => {
+    try {
+      await fetch('/api/block/stop-dig', { method: 'POST' });
+      showToast('🛑 Đã dừng đào');
+    } catch (e) {}
+  };
+
+  const handleMoveItem = async (sourceSlot: number, destSlot: number) => {
+    try {
+      await fetch('/api/inventory/move', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sourceSlot, destSlot }),
+      });
+      showToast(`Đã chuyển đổi ô ${sourceSlot} và ${destSlot}`);
+    } catch (e: any) {
+      showToast('Lỗi chuyển đồ: ' + e.message);
+    }
+  };
+
+  const handleTossItem = async (slot: number, count?: number) => {
+    try {
+      await fetch('/api/inventory/toss', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slot, count }),
+      });
+      showToast(`Đã vứt vật phẩm từ ô ${slot}`);
+    } catch (e: any) {
+      showToast('Lỗi vứt đồ: ' + e.message);
+    }
+  };
+
+  const handleEquipItem = async (slot: number, destination: string) => {
+    try {
+      await fetch('/api/inventory/equip', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slot, destination }),
+      });
+      showToast(`Đã trang bị vật phẩm vào ${destination}`);
+    } catch (e: any) {
+      showToast('Lỗi trang bị: ' + e.message);
+    }
+  };
+
+  const handleConsumeItem = async () => {
+    try {
+      await fetch('/api/inventory/consume', { method: 'POST' });
+      showToast('Đang ăn/dùng vật phẩm trên tay...');
+    } catch (e: any) {
+      showToast('Lỗi dùng đồ: ' + e.message);
+    }
+  };
+
+  const handleActivateItem = async () => {
+    try {
+      await fetch('/api/inventory/activate', { method: 'POST' });
+      showToast('Đã kích hoạt chuột phải vật phẩm đang cầm!');
+    } catch (e: any) {
+      showToast('Lỗi kích hoạt: ' + e.message);
+    }
+  };
+
   const handleClearChat = () => {
     setMessages([]);
     showToast('Đã xóa toàn bộ nhật ký chat');
@@ -302,7 +427,7 @@ export default function App() {
 
         {/* Dashboard 2-Column Balanced Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-          {/* Left Column: Config, Vitals, Movement, Macros, Inventory (5 cols) */}
+          {/* Left Column: Config, Vitals, Movement, Blocks, Macros, Inventory (5 cols) */}
           <div className="lg:col-span-5 flex flex-col gap-5">
             {/* Server Connection Form */}
             <div id="dashboard">
@@ -319,6 +444,18 @@ export default function App() {
 
             {/* Movement Controls (WASD) */}
             <ControlPad onMove={handleMove} disabled={!state.connected} />
+
+            {/* Block Mining & Placing Controls */}
+            <div id="blocks">
+              <BlockControls
+                onDigFront={handleDigFront}
+                onDigDown={handleDigDown}
+                onPlaceFront={handlePlaceFront}
+                onPillarUp={handlePillarUp}
+                onStopDig={handleStopDig}
+                disabled={!state.connected}
+              />
+            </div>
 
             {/* Macros & KingSMP Actions */}
             <div id="macros">
@@ -339,6 +476,11 @@ export default function App() {
                 items={state.inventory}
                 selectedSlot={state.selectedSlot}
                 onSelectSlot={handleSelectSlot}
+                onMoveItem={handleMoveItem}
+                onTossItem={handleTossItem}
+                onEquipItem={handleEquipItem}
+                onConsumeItem={handleConsumeItem}
+                onActivateItem={handleActivateItem}
                 disabled={!state.connected}
               />
             </div>
@@ -352,6 +494,8 @@ export default function App() {
                 pose={pose}
                 snapshot={snapshot}
                 onSendLook={handleSendLook}
+                onDig={handleDigFront}
+                onPlace={handlePlaceFront}
               />
             </div>
 

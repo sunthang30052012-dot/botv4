@@ -49,6 +49,12 @@ export interface InventoryItem {
   durability?: number; // 0-100 percentage
 }
 
+export interface MiningState {
+  isDigging: boolean;
+  blockName?: string;
+  pos?: { x: number; y: number; z: number };
+}
+
 export interface BotState {
   status: string;
   currentXYZ: string;
@@ -59,4 +65,5 @@ export interface BotState {
   pose: BotPose;
   inventory: InventoryItem[];
   selectedSlot: number;
+  miningState?: MiningState;
 }

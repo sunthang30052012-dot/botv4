@@ -6,6 +6,8 @@ interface ViewportCanvasProps {
   pose: BotPose | null;
   snapshot: VoxelSnapshot | null;
   onSendLook?: (yaw: number, pitch: number) => void;
+  onDig?: () => void;
+  onPlace?: () => void;
 }
 
 const BASE: Array<[number, number, number] | null> = [
@@ -30,6 +32,8 @@ export const ViewportCanvas: React.FC<ViewportCanvasProps> = ({
   pose,
   snapshot,
   onSendLook,
+  onDig,
+  onPlace,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [resolution, setResolution] = useState<'72x25' | '100x34' | '140x48'>('100x34');
@@ -467,6 +471,27 @@ export const ViewportCanvas: React.FC<ViewportCanvasProps> = ({
               <ZoomOut className="w-3.5 h-3.5" />
             </button>
           </div>
+
+          {/* Quick Dig & Place Buttons */}
+          {onDig && (
+            <button
+              onClick={onDig}
+              className="px-2 py-0.5 rounded bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 text-xs font-semibold flex items-center gap-1 transition-colors"
+              title="Đào block trước mặt"
+            >
+              <span>⛏️ Đào</span>
+            </button>
+          )}
+
+          {onPlace && (
+            <button
+              onClick={onPlace}
+              className="px-2 py-0.5 rounded bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-xs font-semibold flex items-center gap-1 transition-colors"
+              title="Đặt block đang cầm"
+            >
+              <span>🧱 Đặt</span>
+            </button>
+          )}
         </div>
       </div>
 
